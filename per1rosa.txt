@@ -1,0 +1,122 @@
+#include <iostream>
+#include <algorithm>
+using namespace std;
+int computeArea(int ax1, int ay1, int ax2, int ay2,
+                int bx1, int by1, int bx2, int by2) {
+    
+    int areaA = (ax2 - ax1) * (ay2 - ay1);
+    int areaB = (bx2 - bx1) * (by2 - by1);
+    int overlapWidth = min(ax2, bx2) - max(ax1, bx1);
+    int overlapHeight = min(ay2, by2) - max(ay1, by1);
+    int overlapArea = 0;
+    if (overlapWidth > 0 && overlapHeight > 0) {
+        overlapArea = overlapWidth * overlapHeight;
+    }
+
+    return areaA + areaB - overlapArea;
+}
+int main() {
+    int totalArea = computeArea(-3, 3, 3, 6, 1, 1, 8, 5);
+    cout << "Área total: " << totalArea << endl; // Salida: 42
+    return 0;
+}
+//------------------circulo------------------------------
+#include <iostream>
+#include <algorithm>
+#include <cmath>
+#include <iomanip> // Para limitar los decimales en el output
+
+using namespace std;
+
+// Estructura para el Radar (Círculo)
+struct Radar {
+    float x;      // Posición X del centro
+    float y;      // Posición Y del centro
+    float rango;  // Radio de detección
+};
+
+// Estructura para el Barco (Rectángulo pequeño)
+struct Barco {
+    string nombre;
+    float x1, y1, x2, y2;
+};
+
+// Función para detectar y calcular distancia
+void procesarRadar(Radar r, Barco b) {
+    // 1. Encontrar el punto del barco más cercano al centro del radar
+    float puntoCercanoX = max(b.x1, min(r.x, b.x2));
+    float puntoCercanoY = max(b.y1, min(r.y, b.y2));
+
+    // 2. Calcular la distancia usando Pitágoras
+    float dx = r.x - puntoCercanoX;
+    float dy = r.y - puntoCercanoY;
+    float distanciaReal = sqrt((dx * dx) + (dy * dy));
+
+    // 3. Mostrar resultados
+    cout << "Analizando objeto: " << b.nombre << endl;
+    cout << "Distancia al punto mas cercano: " << fixed << setprecision(2) << distanciaReal << " metros." << endl;
+
+    if (distanciaReal <= r.rango) {
+        cout << ">>> ALERTA: " << b.nombre << " DETECTADO EN EL RADAR <<<" << endl;
+    } else {
+        cout << "Estado: Fuera de alcance." << endl;
+    }
+    cout << "------------------------------------------" << endl;
+}
+
+int main() {
+    // Definimos nuestro radar (en el centro 0,0 y con 100m de alcance)
+    Radar miRadar = {0.0, 0.0, 100.0};
+
+    // Creamos dos barcos para la prueba
+    Barco barco1 = {"Fragata Enemiga", 110.0, 110.0, 115.0, 115.0}; // Lejos
+    Barco barco2 = {"Bote Pesquero", 40.0, -30.0, 45.0, -25.0};    // Cerca
+
+    cout << " RADAR (Rango: " << miRadar.rango << "m) " << endl;
+    cout << "------------------------------------------" << endl;
+
+    // Procesamos los barcos
+    procesarRadar(miRadar, barco1);
+    procesarRadar(miRadar, barco2);
+
+    return 0;
+}
+//--------------------CUadrado
+#include <iostream>
+#include <vector>
+#include <set>
+#include <cmath>
+
+using namespace std;
+
+// Función para calcular la distancia al cuadrado entre dos puntos
+long long distSq(vector<int>& p1, vector<int>& p2) {
+    return (long long)(p1[0] - p2[0]) * (p1[0] - p2[0]) +
+           (long long)(p1[1] - p2[1]) * (p1[1] - p2[1]);
+}
+
+bool validSquare(vector<int>& p1, vector<int>& p2, vector<int>& p3, vector<int>& p4) {
+    // Usamos un set para almacenar distancias únicas
+    // Un cuadrado tiene 4 lados iguales y 2 diagonales iguales.
+    // Por lo tanto, solo debe haber 2 distancias diferentes en total.
+    set<long long> distances;
+    
+    distances.insert(distSq(p1, p2));
+    distances.insert(distSq(p1, p3));
+    distances.insert(distSq(p1, p4));
+    distances.insert(distSq(p2, p3));
+    distances.insert(distSq(p2, p4));
+    distances.insert(distSq(p3, p4));
+
+    // El set debe tener exactamente 2 valores y ninguno debe ser 0
+    // (el 0 significaría que hay puntos superpuestos)
+    return (distances.size() == 2 && *distances.begin() > 0);
+}
+
+int main() {
+    // Caso de prueba 1
+    vector<int> p1 = {0,0}, p2 = {1,1}, p3 = {1,0}, p4 = {0,1};
+    cout << (validSquare(p1, p2, p3, p4) ? "true" : "false") << endl; // Salida: true
+
+    return 0;
+}
