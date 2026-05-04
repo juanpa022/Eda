@@ -1,0 +1,284 @@
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <limits>
+#include <iomanip>
+#include <ctime>
+
+using namespace std;
+
+// Enumeración para elegir la estrategia de división
+enum SplitType { SIMPLE, LINEAL, QUADRATIC };
+
+// ----------- Estructuras Básicas -----------
+
+struct Rect {
+    double minX, minY, maxX, maxY;
+    Rect(double minX = 0, double minY = 0, double maxX = 0, double maxY = 0)
+        : minX(minX), minY(minY), maxX(maxX), maxY(maxY) {
+    }
+
+    // Verifica si dos rectángulos se solapan
+    bool overlaps(const Rect& other) const {
+        return !(minX > other.maxX || maxX < other.minX ||
+            minY > other.maxY || maxY < other.minY);
+    }
+
+    // Retorna el MBR que contiene a ambos rectángulos
+    Rect combine(const Rect& other) const {
+        return Rect(min(minX, other.minX), min(minY, other.minY),
+            max(maxX, other.maxX), max(maxY, other.maxY));
+    }
+
+    double area() const {
+        return (maxX - minX) * (maxY - minY);
+    }
+};
+
+struct Node;
+
+struct Entry {
+    Rect rect;
+    Node* child;
+    Entry(const Rect& r, Node* c = nullptr) : rect(r), child(c) {}
+};
+
+struct Node {
+    bool isLeaf;
+    vector<Entry> entries;
+    Node(bool l = true) : isLeaf(l) {}
+};
+
+// ----------- Implementación del R-Tree -----------
+
+class RTree {
+    Node* root;
+    SplitType splitStrategy;
+    const int MAX_ENTRIES = 4;
+    const int MIN_ENTRIES = 2;
+
+    // Calcula el MBR de una lista de entradas
+    Rect calculateMBR(const vector<Entry>& es) {
+        if (es.empty()) return Rect();
+        Rect res = es[0].rect;
+        for (size_t i = 1; i < es.size(); ++i) res = res.combine(es[i].rect);
+        return res;
+    }
+
+    // 1. SIMPLE SPLIT (Por la mitad basado en X)
+    Node* splitSimple(Node* node) {
+        sort(node->entries.begin(), node->entries.end(), [](const Entry& a, const Entry& b) {
+            return a.rect.minX < b.rect.minX;
+            });
+        Node* sibling = new Node(node->isLeaf);
+        int splitIdx = node->entries.size() / 2;
+        sibling->entries.assign(node->entries.begin() + splitIdx, node->entries.end());
+        node->entries.erase(node->entries.begin() + splitIdx, node->entries.end());
+        return sibling;
+    }
+
+    // 2. LINEAL SPLIT (Guttman's Linear)
+    Node* splitLineal(Node* node) {
+        auto& es = node->entries;
+        // Simplificación: Elegir los extremos en el eje X para las semillas
+        sort(es.begin(), es.end(), [](const Entry& a, const Entry& b) {
+            return a.rect.minX < b.rect.minX;
+            });
+
+        Node* sibling = new Node(node->isLeaf);
+        sibling->entries.push_back(es.back()); // El más a la derecha
+        Entry first = es.front();             // El más a la izquierda
+        es.pop_back();
+        es.erase(es.begin());
+
+        // Distribuir el resto alternadamente para mantener equilibrio lineal
+        while (!es.empty()) {
+            if (node->entries.size() < sibling->entries.size()) node->entries.push_back(es.back());
+            else sibling->entries.push_back(es.back());
+            es.pop_back();
+        }
+        node->entries.push_back(first);
+        return sibling;
+    }
+
+    // 3. QUADRATIC SPLIT (Guttman's Quadratic)
+    Node* splitQuadratic(Node* node) {
+        vector<Entry> allEntries = node->entries;
+        node->entries.clear();
+        Node* sibling = new Node(node->isLeaf);
+
+        // PickSeeds: Par con mayor área desperdiciada
+        int s1 = 0, s2 = 1;
+        double maxWaste = -1.0;
+        for (int i = 0; i < allEntries.size(); ++i) {
+            for (int j = i + 1; j < allEntries.size(); ++j) {
+                double waste = allEntries[i].rect.combine(allEntries[j].rect).area()
+                    - allEntries[i].rect.area() - allEntries[j].rect.area();
+                if (waste > maxWaste) { maxWaste = waste; s1 = i; s2 = j; }
+            }
+        }
+
+        node->entries.push_back(allEntries[s1]);
+        sibling->entries.push_back(allEntries[s2]);
+
+        // Guardar y eliminar semillas de la lista temporal
+        Entry e1 = allEntries[s1];
+        Entry e2 = allEntries[s2];
+        allEntries.erase(allEntries.begin() + max(s1, s2));
+        allEntries.erase(allEntries.begin() + min(s1, s2));
+
+        while (!allEntries.empty()) {
+            // Garantizar mínimo de entradas
+            if (node->entries.size() + allEntries.size() == MIN_ENTRIES) {
+                for (auto& e : allEntries) node->entries.push_back(e);
+                break;
+            }
+            if (sibling->entries.size() + allEntries.size() == MIN_ENTRIES) {
+                for (auto& e : allEntries) sibling->entries.push_back(e);
+                break;
+            }
+
+            // PickNext: Entrada con mayor diferencia de crecimiento
+            int bestIdx = 0;
+            double maxDiff = -1.0;
+            Rect mbr1 = calculateMBR(node->entries);
+            Rect mbr2 = calculateMBR(sibling->entries);
+
+            for (int i = 0; i < allEntries.size(); ++i) {
+                double d1 = mbr1.combine(allEntries[i].rect).area() - mbr1.area();
+                double d2 = mbr2.combine(allEntries[i].rect).area() - mbr2.area();
+                if (abs(d1 - d2) > maxDiff) { maxDiff = abs(d1 - d2); bestIdx = i; }
+            }
+
+            // Asignar al grupo que menos crezca
+            double d1 = mbr1.combine(allEntries[bestIdx].rect).area() - mbr1.area();
+            double d2 = mbr2.combine(allEntries[bestIdx].rect).area() - mbr2.area();
+            if (d1 < d2) node->entries.push_back(allEntries[bestIdx]);
+            else sibling->entries.push_back(allEntries[bestIdx]);
+
+            allEntries.erase(allEntries.begin() + bestIdx);
+        }
+        return sibling;
+    }
+
+    Node* splitNode(Node* node) {
+        if (splitStrategy == QUADRATIC) return splitQuadratic(node);
+        if (splitStrategy == LINEAL) return splitLineal(node);
+        return splitSimple(node);
+    }
+
+    int chooseSubtree(Node* node, const Rect& rect) {
+        double minEnlargement = numeric_limits<double>::max();
+        int bestIdx = 0;
+        for (int i = 0; i < node->entries.size(); i++) {
+            double enlargement = node->entries[i].rect.combine(rect).area() - node->entries[i].rect.area();
+            if (enlargement < minEnlargement) {
+                minEnlargement = enlargement;
+                bestIdx = i;
+            }
+        }
+        return bestIdx;
+    }
+
+    void adjustTree(vector<Node*>& path, vector<int>& indices, Node* child2) {
+        for (int i = path.size() - 1; i >= 0; --i) {
+            Node* parent = path[i];
+            parent->entries[indices[i]].rect = calculateMBR(parent->entries[indices[i]].child->entries);
+            if (child2) {
+                parent->entries.push_back(Entry(calculateMBR(child2->entries), child2));
+                if (parent->entries.size() > MAX_ENTRIES) child2 = splitNode(parent);
+                else child2 = nullptr;
+            }
+        }
+        if (child2) {
+            Node* oldRoot = root;
+            root = new Node(false);
+            root->entries.push_back(Entry(calculateMBR(oldRoot->entries), oldRoot));
+            root->entries.push_back(Entry(calculateMBR(child2->entries), child2));
+        }
+    }
+
+public:
+    RTree(SplitType type) : splitStrategy(type) { root = new Node(true); }
+
+    void insert(const Rect& rect) {
+        Node* node = root;
+        vector<Node*> path;
+        vector<int> indices;
+        while (!node->isLeaf) {
+            int idx = chooseSubtree(node, rect);
+            path.push_back(node);
+            indices.push_back(idx);
+            node = node->entries[idx].child;
+        }
+        node->entries.push_back(Entry(rect));
+        if (node->entries.size() > MAX_ENTRIES) {
+            Node* sibling = splitNode(node);
+            adjustTree(path, indices, sibling);
+        }
+        else {
+            adjustTree(path, indices, nullptr);
+        }
+    }
+
+    void search(Node* node, const Rect& query, vector<Rect>& result) {
+        if (!node) return;
+        for (const auto& e : node->entries) {
+            if (e.rect.overlaps(query)) {
+                if (node->isLeaf) result.push_back(e.rect);
+                else search(e.child, query, result);
+            }
+        }
+    }
+
+    void imprimir() { printNode(root, 0); }
+
+    void printNode(Node* node, int nivel) {
+        string indent(nivel * 4, ' ');
+        if (node->isLeaf) {
+            cout << indent << "[Hoja] " << node->entries.size() << " rects\n";
+        }
+        else {
+            cout << indent << "[Interno] " << node->entries.size() << " hijos:\n";
+            for (auto& e : node->entries) {
+                cout << indent << "  MBR: [" << fixed << setprecision(1) << e.rect.minX << "," << e.rect.minY
+                    << " a " << e.rect.maxX << "," << e.rect.maxY << "]\n";
+                printNode(e.child, nivel + 1);
+            }
+        }
+    }
+};
+
+
+int main() {
+    // Generar datos aleatorios una sola vez para que la comparación sea justa
+    srand(10);
+    vector<Rect> dataset;
+    for (int i = 0; i < 25; ++i) {
+        double x = rand() % 80, y = rand() % 80;
+        dataset.push_back(Rect(x, y, x + 10, y + 10));
+    }
+
+    SplitType strategies[] = { SIMPLE, LINEAL, QUADRATIC };
+    string names[] = { "SIMPLE (MITAD)", "LINEAL (GUTTMAN)", "QUADRATIC (GUTTMAN)" };
+
+    for (int i = 0; i < 3; ++i) {
+        
+        cout << "\n ESTRATEGIA: " << names[i];
+        
+
+        RTree tree(strategies[i]);
+        for (const auto& r : dataset) tree.insert(r);
+
+        tree.imprimir();
+
+        // Ejemplo de búsqueda
+        vector<Rect> results;
+        Rect query(20, 20, 40, 40);
+        // Nota: En una implementación real, 'root' debería ser accesible o search ser pública
+        // Aquí llamamos a una versión que use la raíz internamente si prefieres
+        // tree.search(query, results); 
+    }
+
+    return 0;
+}
