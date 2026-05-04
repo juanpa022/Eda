@@ -1,0 +1,191 @@
+------------------randPoin---------------------------
+#include <bits/stdc++.h>
+using namespace std;
+
+class Solution {
+    double R, X, Y;
+public:
+    Solution(double radius, double x_center, double y_center) {
+        R = radius;
+        X = x_center;
+        Y = y_center;
+    }
+    
+    vector<double> randPoint() {
+        double rx, ry;
+        do {
+            // Punto aleatorio en el cuadrado [-R, R] x [-R, R]
+            rx = (double)rand() / RAND_MAX * 2 * R - R;
+            ry = (double)rand() / RAND_MAX * 2 * R - R;
+        } while (rx * rx + ry * ry > R * R); // Rechazar si está fuera
+
+        return {X + rx, Y + ry};
+    }
+};
+
+int main() {
+    srand(time(0)); // Semilla
+
+    int n;
+    cin >> n;
+
+    Solution* obj = nullptr;
+
+    for (int i = 0; i < n; i++) {
+        string op;
+        cin >> op;
+
+        if (op == "Solution") {
+            double r, x, y;
+            cin >> r >> x >> y;
+            obj = new Solution(r, x, y);
+            cout << "null" << endl;
+        } 
+        else if (op == "randPoint") {
+            vector<double> ans = obj->randPoint();
+            cout << "[" << ans[0] << ", " << ans[1] << "]" << endl;
+        }
+    }
+
+    return 0;
+}
+-------------------------------Maxpoin---------------------------------
+#include <iostream>
+#include <vector>
+#include <unordered_map>
+#include <numeric>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+class Solution {
+public:
+    // Función para calcular el Máximo Común Divisor
+    int gcd(int a, int b) {
+        while (b) {
+            a %= b;
+            swap(a, b);
+        }
+        return a;
+    }
+
+    int maxPoints(vector<vector<int>>& points) {
+        int n = points.size();
+        if (n <= 2) return n;
+
+        int max_global = 0;
+
+        for (int i = 0; i < n; ++i) {
+            unordered_map<string, int> counts;
+            int local_max = 0;
+
+            for (int j = i + 1; j < n; ++j) {
+                int dx = points[j][0] - points[i][0];
+                int dy = points[j][1] - points[i][1];
+
+                // Simplificamos la pendiente como una fracción (dy/dx)
+                int common = gcd(dx, dy);
+                dx /= common;
+                dy /= common;
+
+                // Formateamos la pendiente como un string único "y/x"
+                string slope = to_string(dy) + "/" + to_string(dx);
+                counts[slope]++;
+                local_max = max(local_max, counts[slope]);
+            }
+            // El +1 es para contar el punto origen (i)
+            max_global = max(max_global, local_max + 1);
+        }
+
+        return max_global;
+    }
+};
+
+int main() {
+    Solution sol;
+
+    // Ejemplo 1 de la imagen
+    vector<vector<int>> points1 = {{1, 1}, {2, 2}, {3, 3}};
+    cout << "Input: points = [[1,1],[2,2],[3,3]]" << endl;
+    cout << "Output: " << sol.maxPoints(points1);
+	return 0;}
+------------------------MinAreaRec------------------------
+#include <iostream>
+#include <vector>
+#include <map>
+#include <cmath>
+#include <float.h>
+#include <iomanip>
+
+using namespace std;
+
+class Solution {
+public:
+    double minAreaFreeRect(vector<vector<int>>& points) {
+        int n = points.size();
+        // Clave: {distancia_diagonal_cuadrado, {centro_x, centro_y}}
+        map<pair<long long, pair<double, double>>, vector<pair<int, int>>> diagonals;
+        
+        for (int i = 0; i < n; ++i) {
+            for (int j = i + 1; j < n; ++j) {
+                // 1. Calcular distancia al cuadrado entre puntos (longitud de diagonal)
+                long long dx = points[i][0] - points[j][0];
+                long long dy = points[i][1] - points[j][1];
+                long long distSq = dx * dx + dy * dy;
+                
+                // 2. Calcular punto medio de la diagonal
+                double centerX = (points[i][0] + points[j][0]) / 2.0;
+                double centerY = (points[i][1] + points[j][1]) / 2.0;
+                
+                diagonals[{distSq, {centerX, centerY}}].push_back({i, j});
+            }
+        }
+        
+        double minArea = DBL_MAX;
+        bool found = false;
+        
+        // 3. Si dos diagonales tienen mismo centro y longitud, forman un rectángulo
+        for (auto const& [key, pList] : diagonals) {
+            if (pList.size() > 1) {
+                for (int i = 0; i < pList.size(); ++i) {
+                    for (int j = i + 1; j < pList.size(); ++j) {
+                        int p1 = pList[i].first;
+                        int p2 = pList[j].first;
+                        int p3 = pList[j].second;
+                        
+                        // Lados del rectángulo: distancia de p1 a los extremos de la otra diagonal
+                        double d1 = sqrt(pow(points[p1][0] - points[p2][0], 2) + 
+                                         pow(points[p1][1] - points[p2][1], 2));
+                        double d2 = sqrt(pow(points[p1][0] - points[p3][0], 2) + 
+                                         pow(points[p1][1] - points[p3][1], 2));
+                        
+                        minArea = min(minArea, d1 * d2);
+                        found = true;
+                    }
+                }
+            }
+        }
+        
+        return found ? minArea : 0.0;
+    }
+};
+
+int main() {
+    Solution sol;
+    cout << fixed << setprecision(5); // Para mostrar 5 decimales como en el ejemplo
+
+    // Ejemplo 1: Cuadrado rotado
+    vector<vector<int>> p1 = {{1, 2}, {2, 1}, {1, 0}, {0, 1}};
+    cout << "Ejemplo 1: " << sol.minAreaFreeRect(p1) << " (Esperado: 2.00000)" << endl;
+
+    // Ejemplo 2: Varios puntos, rectángulo paralelo
+    vector<vector<int>> p2 = {{0, 1}, {2, 1}, {1, 1}, {1, 0}, {2, 0}};
+    cout << "Ejemplo 2: " << sol.minAreaFreeRect(p2) << " (Esperado: 1.00000)" << endl;
+
+    // Ejemplo 3: No se puede formar rectángulo
+    vector<vector<int>> p3 = {{0, 3}, {1, 2}, {3, 1}, {1, 3}, {2, 1}};
+    cout << "Ejemplo 3: " << sol.minAreaFreeRect(p3) << " (Esperado: 0.00000)" << endl;
+
+    return 0;
+}
